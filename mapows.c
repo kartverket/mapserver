@@ -892,6 +892,21 @@ const char *msOWSGetSchemasLocation(mapObj *map)
   return schemas_location;
 }
 
+/* msOWSGetCapabilitiesXSLTLocation()
+**
+** Use value of "ows_" metadata, if not set then
+** return ".." as a default
+*/
+const char *msOWSGetCapabilitiesXSLTLocation(mapObj *map)
+{
+  const char *xslt_location;
+
+  xslt_location = msLookupHashTable(&(map->web.metadata),
+                                       "ows_getcapabilities_xslt_location");
+
+  return xslt_location;
+}
+
 /* msOWSGetLanguage()
 **
 ** returns the language via MAP/WEB/METADATA/ows_language

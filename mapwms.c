@@ -2669,6 +2669,7 @@ int msWMSGetCapabilities(mapObj *map, int nVersion, cgiRequestObj *req, owsReque
                          const char *requested_updatesequence, char *wms_exception_format, const char *requested_language)
 {
   char *dtd_url = NULL;
+  char *xslt_url = NULL;
   char *script_url=NULL, *script_url_encoded=NULL;
 
   char szVersionBuf[OWS_VERSION_MAXLEN];
@@ -2706,6 +2707,7 @@ int msWMSGetCapabilities(mapObj *map, int nVersion, cgiRequestObj *req, owsReque
   }
 
   schemalocation = msEncodeHTMLEntities( msOWSGetSchemasLocation(map) );
+  xslt_url = msOWSGetCapabilitiesXSLTLocation(map);
 
   if (nVersion < 0)
     nVersion = OWS_1_3_0;     /* Default to 1.3.0 */
@@ -2774,6 +2776,9 @@ int msWMSGetCapabilities(mapObj *map, int nVersion, cgiRequestObj *req, owsReque
                            "<?xml version='1.0' encoding=\"%s\" standalone=\"no\" ?>\n",
                            "ISO-8859-1");
 
+  if (xslt_url != NULL) {
+    msIO_printf("<?xml-stylesheet type=\"text/xsl\" href=\"%s\" ?>\n", xslt_url);
+  }
   /*TODO review wms1.3.0*/
   if ( nVersion < OWS_1_3_0) {
     msIO_printf("<!DOCTYPE WMT_MS_Capabilities SYSTEM \"%s\"\n", dtd_url);
