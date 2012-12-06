@@ -1257,7 +1257,7 @@ static void osCloneShape(shapeObj *shape, shapeObj *newshape, int data3d, int da
 
   if (g) {
     shapeline.numpoints = g;
-    newshape->type = shape->type; /* jimk: 2009/09/23 Fixes compound linestrings being converted to polygons */
+    newshape->type = MS_SHAPE_POLYGON; /* jimk: 2009/09/23 Fixes compound linestrings being converted to polygons */
     msAddLine( newshape, &shapeline );
   }
 }
