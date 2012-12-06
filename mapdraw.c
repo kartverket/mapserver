@@ -618,16 +618,17 @@ int msLayerIsVisible(mapObj *map, layerObj *layer)
 
   if(msEvalContext(map, layer, layer->requires) == MS_FALSE) return(MS_FALSE);
 
+  double scalefactor = msGetScaleFactor(map);
   if(map->scaledenom > 0) {
 
     /* layer scale boundaries should be checked first */
-    if((layer->maxscaledenom > 0) && (map->scaledenom > layer->maxscaledenom)) {
+    if((layer->maxscaledenom > 0) && (map->scaledenom > (layer->maxscaledenom * scalefactor) )) {
       if( layer->debug >= MS_DEBUGLEVEL_V ) {
         msDebug("msLayerIsVisible(): Skipping layer (%s) because LAYER.MAXSCALE is too small for this MAP scale\n", layer->name);
       }
       return(MS_FALSE);
     }
-    if((layer->minscaledenom > 0) && (map->scaledenom <= layer->minscaledenom)) {
+    if((layer->minscaledenom > 0) && (map->scaledenom <= (layer->minscaledenom * scalefactor) )) {
       if( layer->debug >= MS_DEBUGLEVEL_V ) {
         msDebug("msLayerIsVisible(): Skipping layer (%s) because LAYER.MINSCALE is too large for this MAP scale\n", layer->name);
       }
@@ -637,9 +638,9 @@ int msLayerIsVisible(mapObj *map, layerObj *layer)
     /* now check class scale boundaries (all layers *must* pass these tests) */
     if(layer->numclasses > 0) {
       for(i=0; i<layer->numclasses; i++) {
-        if((layer->class[i]->maxscaledenom > 0) && (map->scaledenom > layer->class[i]->maxscaledenom))
+        if((layer->class[i]->maxscaledenom > 0) && (map->scaledenom > (layer->class[i]->maxscaledenom * scalefactor)))
           continue; /* can skip this one, next class */
-        if((layer->class[i]->minscaledenom > 0) && (map->scaledenom <= layer->class[i]->minscaledenom))
+        if((layer->class[i]->minscaledenom > 0) && (map->scaledenom <= (layer->class[i]->minscaledenom * scalefactor)))
           continue; /* can skip this one, next class */
 
         break; /* can't skip this class (or layer for that matter) */
@@ -920,9 +921,10 @@ int msDrawVectorLayer(mapObj *map, layerObj *layer, imageObj *image)
   /* TODO TBT: draw as raster layer in vector renderers */
 
   annotate = msEvalContext(map, layer, layer->labelrequires);
+  double scalefactor = msGetScaleFactor(map);
   if(map->scaledenom > 0) {
-    if((layer->labelmaxscaledenom != -1) && (map->scaledenom >= layer->labelmaxscaledenom)) annotate = MS_FALSE;
-    if((layer->labelminscaledenom != -1) && (map->scaledenom < layer->labelminscaledenom)) annotate = MS_FALSE;
+    if((layer->labelmaxscaledenom != -1) && (map->scaledenom >= (layer->labelmaxscaledenom * scalefactor))) annotate = MS_FALSE;
+    if((layer->labelminscaledenom != -1) && (map->scaledenom < (layer->labelminscaledenom * scalefactor))) annotate = MS_FALSE;
   }
 
 #ifdef USE_GD
@@ -1132,9 +1134,9 @@ int msDrawVectorLayer(mapObj *map, layerObj *layer, imageObj *image)
           if(pStyle->_geomtransform.type != MS_GEOMTRANSFORM_NONE)
             continue; /*skip this as it has already been rendered*/
           if(map->scaledenom > 0) {
-            if((pStyle->maxscaledenom != -1) && (map->scaledenom >= pStyle->maxscaledenom))
+            if((pStyle->maxscaledenom != -1) && (map->scaledenom >= (pStyle->maxscaledenom * scalefactor)))
               continue;
-            if((pStyle->minscaledenom != -1) && (map->scaledenom < pStyle->minscaledenom))
+            if((pStyle->minscaledenom != -1) && (map->scaledenom < (pStyle->minscaledenom * scalefactor)))
               continue;
           }
           if(s==0 && pStyle->outlinewidth>0 && MS_VALID_COLOR(pStyle->color)) {
@@ -1231,9 +1233,10 @@ int msDrawQueryLayer(mapObj *map, layerObj *layer, imageObj *image)
 
   /* set annotation status */
   annotate = msEvalContext(map, layer, layer->labelrequires);
+  double scalefactor = msGetScaleFactor(map);
   if(map->scaledenom > 0) {
-    if((layer->labelmaxscaledenom != -1) && (map->scaledenom >= layer->labelmaxscaledenom)) annotate = MS_FALSE;
-    if((layer->labelminscaledenom != -1) && (map->scaledenom < layer->labelminscaledenom)) annotate = MS_FALSE;
+    if((layer->labelmaxscaledenom != -1) && (map->scaledenom >= (layer->labelmaxscaledenom * scalefactor))) annotate = MS_FALSE;
+    if((layer->labelminscaledenom != -1) && (map->scaledenom < (layer->labelminscaledenom * scalefactor))) annotate = MS_FALSE;
   }
 
   /*
@@ -1380,9 +1383,9 @@ int msDrawQueryLayer(mapObj *map, layerObj *layer, imageObj *image)
         if(layer->class[current->shape.classindex]->numstyles > s) {
           styleObj *curStyle = layer->class[current->shape.classindex]->styles[s];
           if(map->scaledenom > 0) {
-            if((curStyle->maxscaledenom != -1) && (map->scaledenom >= curStyle->maxscaledenom))
+            if((curStyle->maxscaledenom != -1) && (map->scaledenom >= (curStyle->maxscaledenom * scalefactor)))
               continue;
-            if((curStyle->minscaledenom != -1) && (map->scaledenom < curStyle->minscaledenom))
+            if((curStyle->minscaledenom != -1) && (map->scaledenom < (curStyle->minscaledenom * scalefactor)))
               continue;
           }
           msDrawLineSymbol(&map->symbolset, image, &current->shape, (layer->class[current->shape.classindex]->styles[s]), layer->scalefactor);
@@ -2150,6 +2153,7 @@ int msDrawShape(mapObj *map, layerObj *layer, shapeObj *shape, imageObj *image, 
     goto draw_shape_cleanup;
   }
 
+  double scalefactor = msGetScaleFactor(map);
   switch(layer->type) {
     case MS_LAYER_ANNOTATION:
       if(MS_DRAW_LABELS(drawmode))

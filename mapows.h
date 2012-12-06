@@ -493,6 +493,8 @@ int msWCSDispatch(mapObj *map, cgiRequestObj *requestobj, owsRequestObj *ows_req
 
 int msSOSDispatch(mapObj *map, cgiRequestObj *requestobj, owsRequestObj *ows_request); /* only 1 public function */
 
+/* custom */
+double msGetScaleFactor (mapObj *map);
 
 #endif /* MAPOWS_H */
 

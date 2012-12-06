@@ -1079,6 +1079,7 @@ void msFreeProjection(projectionObj *p)
     pj_ctx_free(p->proj_ctx);
     p->proj_ctx = NULL;
   }
+  p->projectionScaleFactor = -1.0;
 #endif
 
   msFreeCharArray(p->args, p->numargs);

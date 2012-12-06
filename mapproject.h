@@ -71,6 +71,7 @@ extern "C" {
     geotransformObj gt; /* extra transformation to apply */
 #endif
     int wellknownprojection;
+    double projectionScaleFactor; /* wms: this will affect maxscaledenominators in the output map */
   } projectionObj;
 
 #ifndef SWIG

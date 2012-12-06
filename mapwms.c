@@ -4999,3 +4999,34 @@ int msWMSDispatch(mapObj *map, cgiRequestObj *req, owsRequestObj *ows_request, i
 #endif
 }
 
+double msGetScaleFactor (mapObj *map)
+{
+    projectionObj *projection= &(map->projection);
+    if (projection->projectionScaleFactor > 0) {
+	  return projection->projectionScaleFactor; /* no need to calculate it more than once */
+    }
+    hashTableObj *hashtable  = &(map->web.metadata);
+	if (projection->numargs == 0) {
+	   msDebug("msLayerGetScaleFactor(): projection is undefined, defaulting\n");
+	   return 1.0;
+	}
+	char *projstring = projection->args[0];
+	if (strncmp(projstring, "init=", 5) != 0) {
+	   msDebug("msLayerGetCurrentScales(): projection arg0 does not begin with init=, defaulting\n");
+	   return 1.0;
+    }		
+	const char *projid  = projstring+5; /* skipping 'init=' */
+	char       *label   = "wms_scalefactor_";
+	char       lookup[strlen(projid)+strlen(label)];
+	strcpy(lookup, label);
+    strcpy(lookup+strlen(label),projid);
+    //msDebug("msLayerGetScaleFactor(): lookup id is %s\n", lookup);
+	char       *sfactor = msLookupHashTable(hashtable, lookup);
+	if (sfactor == 0) {
+	   /* there is no scale set defined for this projection, defaulting to '*'. This should happen
+	    * often enough, so we do not include a debug message here. */
+	   return 1.0;
+	}
+	projection->projectionScaleFactor = atof(sfactor);
+	return projection->projectionScaleFactor;
+} 
