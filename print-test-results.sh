@@ -16,6 +16,9 @@ if command_exists compare ; then
    COMPARE="compare"
 fi
 
+#leftover .aux.xml files are valid for some gdal tests
+rm -f msautotest/*/result/*.aux.xml
+
 for testcase in "${tests[@]}"; do
    cd msautotest/$testcase
    if [ ! -d result ]; then
@@ -24,8 +27,6 @@ for testcase in "${tests[@]}"; do
       continue
    fi
    cd result
-   rm -f *.aux.xml
-   #leftover .aux.xml files are valid for some gdal tests
    failedtests=`find . -type f -printf "%f\n" `
    if [ -z "$failedtests" ]; then
       cd ../../..
@@ -44,7 +45,7 @@ for testcase in "${tests[@]}"; do
       fi
       if echo "$failedtest" | egrep -q "(png|gif|tif)$"; then
         if echo "$failedtest" | egrep -v -q "\\.diff\\.png$"; then
-           if [ -n $COMPARE ]; then
+           if [ -n "$COMPARE" ]; then
               $COMPARE ../expected/$failedtest $failedtest -compose Src $failedtest.diff.png
            fi
         fi

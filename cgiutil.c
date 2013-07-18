@@ -64,7 +64,7 @@ int readPostBody( cgiRequestObj *request, char **data )
     if( *data == NULL ) {
       msIO_setHeader("Content-Type","text/html");
       msIO_sendHeaders();
-      msIO_printf("malloc() failed, Content-Length: %u unreasonably large?\n", data_max );
+      msIO_printf("malloc() failed, Content-Length: %u unreasonably large?\n", (unsigned int)data_max );
       return MS_FAILURE;
     }
 
@@ -104,7 +104,7 @@ int readPostBody( cgiRequestObj *request, char **data )
     }
   }
 
-  *data[data_len] = '\0';
+  (*data)[data_len] = '\0';
   return MS_SUCCESS;
 }
 
@@ -159,7 +159,7 @@ int loadParams(cgiRequestObj *request,
 
     /* if the content_type is application/x-www-form-urlencoded,
        we have to parse it like the QUERY_STRING variable */
-    if(strcmp(request->contenttype, "application/x-www-form-urlencoded") == 0) {
+    if(strncmp(request->contenttype, "application/x-www-form-urlencoded", strlen("application/x-www-form-urlencoded")) == 0) {
       while( data_len > 0 && isspace(post_data[data_len-1]) )
         post_data[--data_len] = '\0';
 

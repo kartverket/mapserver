@@ -97,8 +97,8 @@ static int isValidTemplate(FILE *stream, const char *filename)
 int msRedirect(char *url)
 {
   msIO_setHeader("Status","302 Found");
-  msIO_setHeader("Uri",url);
-  msIO_setHeader("Location",url);
+  msIO_setHeader("Uri","%s",url);
+  msIO_setHeader("Location","%s",url);
   msIO_setHeader("Content-Type","text/html");
   msIO_sendHeaders();
   return MS_SUCCESS;
@@ -274,7 +274,7 @@ int msReturnTemplateQuery(mapservObj *mapserv, char *queryFormat, char **papszBu
       map->outputformat = tempOutputFormat; /* restore format */
 
       if(mapserv == NULL || mapserv->sendheaders) {
-        msIO_setHeader("Content-Type", MS_IMAGE_MIME_TYPE(outputFormat));
+        msIO_setHeader("Content-Type", "%s", MS_IMAGE_MIME_TYPE(outputFormat));
         msIO_sendHeaders();
       }
       status = msSaveImage(map, img, NULL);
@@ -306,7 +306,7 @@ int msReturnTemplateQuery(mapservObj *mapserv, char *queryFormat, char **papszBu
       const char *attachment = msGetOutputFormatOption( outputFormat, "ATTACHMENT", NULL );
       if(attachment)
         msIO_setHeader("Content-disposition","attachment; filename=%s", attachment);
-      msIO_setHeader("Content-Type", outputFormat->mimetype);
+      msIO_setHeader("Content-Type", "%s", outputFormat->mimetype);
       msIO_sendHeaders();
     }
     if((status = msReturnPage(mapserv, (char *) file, BROWSE, papszBuffer)) != MS_SUCCESS)
@@ -1131,7 +1131,7 @@ static int processIncludeTag(mapservObj *mapserv, char **line, FILE *stream, int
     if(!src) return(MS_SUCCESS); /* don't process the tag, could be something else so return MS_SUCCESS */
 
     if((includeStream = fopen(msBuildPath(path, mapserv->map->mappath, src), "r")) == NULL) {
-      msSetError(MS_IOERR, src, "processIncludeTag()");
+      msSetError(MS_IOERR, "%s", "processIncludeTag()", src);
       return MS_FAILURE;
     }
 
@@ -2058,7 +2058,7 @@ static int processShpxyTag(layerObj *layer, char **line, shapeObj *shape)
     }
 
     /* build the per point format strings (version 1 contains the coordinate seperator, version 2 doesn't) */
-    pointFormatLength = strlen("xh") + strlen("xf") + strlen("yh") + strlen("yf") + strlen("cs") + 10 + 1;
+    pointFormatLength = strlen(xh) + strlen(xf) + strlen(yh) + strlen(yf) + strlen(cs) + 12 + 1;
     pointFormat1 = (char *) msSmallMalloc(pointFormatLength);
     snprintf(pointFormat1, pointFormatLength, "%s%%.%dlf%s%s%%.%dlf%s%s", xh, precision, xf, yh, precision, yf, cs);
     pointFormat2 = (char *) msSmallMalloc(pointFormatLength);
@@ -2407,10 +2407,10 @@ int processIcon(mapObj *map, int nIdxLayer, int nIdxClass, char** pszInstr, char
 
       if(thisClass == NULL) {
         /* Nonexistent class.  Create an empty image */
-        img = msCreateLegendIcon(map, NULL, NULL, nWidth, nHeight);
+        img = msCreateLegendIcon(map, NULL, NULL, nWidth, nHeight, MS_TRUE);
       } else {
         img = msCreateLegendIcon(map, GET_LAYER(map, nIdxLayer),
-                                 thisClass, nWidth, nHeight);
+                                 thisClass, nWidth, nHeight, MS_TRUE);
       }
 
       if(!img) {
@@ -4051,7 +4051,7 @@ int msReturnPage(mapservObj *mapserv, char *html, int mode, char **papszBuffer)
   ms_regfree(&re);
 
   if((stream = fopen(msBuildPath(szPath, mapserv->map->mappath, html), "r")) == NULL) {
-    msSetError(MS_IOERR, html, "msReturnPage()");
+    msSetError(MS_IOERR, "%s", "msReturnPage()", html);
     return MS_FAILURE;
   }
 
@@ -4247,7 +4247,7 @@ int msReturnNestedTemplateQuery(mapservObj* mapserv, char* pszMimeType, char **p
     strcat((*papszBuffer), buffer);
     nCurrentSize += strlen(buffer);
   } else if(mapserv->sendheaders) {
-    msIO_setHeader("Content-Type",pszMimeType);
+    msIO_setHeader("Content-Type","%s",pszMimeType);
     msIO_sendHeaders();
   }
 

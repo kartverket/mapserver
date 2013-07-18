@@ -172,6 +172,13 @@ faceCacheObj *getFontFace(cairoCacheData *cache, const char *font)
     free(newface);
     return NULL;
   }
+
+  /* Try to select charmap */
+  if (!newface->ftface->charmap) {
+    if( FT_Select_Charmap(newface->ftface, FT_ENCODING_MS_SYMBOL) )
+       FT_Select_Charmap(newface->ftface, FT_ENCODING_APPLE_ROMAN );
+  }
+
   newface->next = cache->facecache;
   cache->facecache = newface;
   newface->face = cairo_ft_font_face_create_for_ft_face(newface->ftface, 0);
@@ -403,6 +410,11 @@ int renderTruetypeSymbolCairo(imageObj *img, double x, double y, symbolObj *symb
 
 
   msUTF8ToUniChar(symbol->character, &unicode);
+
+  if (face->ftface->charmap &&
+    face->ftface->charmap->encoding == FT_ENCODING_MS_SYMBOL)
+    unicode |= 0xf000;
+
   glyph.index = FT_Get_Char_Index(face->ftface, unicode);
   glyph.x=0;
   glyph.y=0;
@@ -497,6 +509,10 @@ int getTruetypeTextBBoxCairo(rendererVTableObj *renderer, char **fonts, int numf
       curfontidx = 0;
     }
 
+    if (face->ftface->charmap &&
+      face->ftface->charmap->encoding == FT_ENCODING_MS_SYMBOL)
+      unicode |= 0xf000;
+
     glyph.index = FT_Get_Char_Index(face->ftface, unicode);
 
     if (glyph.index == 0) {
@@ -582,6 +598,11 @@ int renderGlyphsCairo(imageObj *img,double x, double y, labelStyleObj *style, ch
       cairo_set_font_face(r->cr,face->face);
       curfontidx = 0;
     }
+
+    if (face->ftface->charmap &&
+      face->ftface->charmap->encoding == FT_ENCODING_MS_SYMBOL)
+      unicode |= 0xf000;
+
     glyph.index = FT_Get_Char_Index(face->ftface, unicode);
     if(glyph.index == 0) {
       int j;
@@ -710,7 +731,7 @@ imageObj* createImageCairo(int width, int height, outputFormatObj *format,colorO
 
 static void msTransformToGeospatialPDF(imageObj *img, mapObj *map, cairo_renderer *r)
 {
-  /* We need a GDAL 2.0 PDF driver at runtime, but as far as the C API is concerned, GDAL 1.9 is */
+  /* We need a GDAL 1.10 PDF driver at runtime, but as far as the C API is concerned, GDAL 1.9 is */
   /* largely sufficient. */
 #if defined(USE_GDAL) && defined(GDAL_VERSION_NUM) && GDAL_VERSION_NUM >= 1900
   GDALDatasetH hDS = NULL;
@@ -1249,7 +1270,7 @@ int msPopulateRendererVTableCairoRaster( rendererVTableObj *renderer )
 #endif
 }
 
-inline int populateRendererVTableCairoVector( rendererVTableObj *renderer )
+int populateRendererVTableCairoVector( rendererVTableObj *renderer )
 {
 #ifdef USE_CAIRO
   renderer->use_imagecache=0;

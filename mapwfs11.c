@@ -209,11 +209,10 @@ static xmlNodePtr msWFSDumpLayer11(mapObj *map, layerObj *lp, xmlNsPtr psNsOws)
   /*bbox*/
   if (msOWSGetLayerExtent(map, lp, "FO", &ext) == MS_SUCCESS) {
     /*convert to latlong*/
-    if (lp->projection.numargs > 0) {
-      if (!pj_is_latlong(&lp->projection.proj))
-        msProjectRect(&lp->projection, NULL, &ext);
-    } else if (map->projection.numargs > 0 && !pj_is_latlong(&map->projection.proj))
-      msProjectRect(&map->projection, NULL, &ext);
+    if (lp->projection.numargs > 0)
+      msOWSProjectToWGS84(&lp->projection, &ext);
+    else
+      msOWSProjectToWGS84(&map->projection, &ext);
 
     xmlAddChild(psRootNode,
                 msOWSCommonWGS84BoundingBox( psNsOws, 2,
@@ -266,7 +265,7 @@ int msWFSGetCapabilities11(mapObj *map, wfsParamsObj *params,
   const char *user_namespace_uri = NULL;
   gmlNamespaceListObj *namespaceList=NULL; /* for external application schema support */
 
-  char *script_url=NULL, *script_url_encoded=NULL, *formats_list;
+  char *script_url=NULL, *formats_list;
   const char *value = NULL;
   const char *encoding;
 
@@ -366,8 +365,7 @@ int msWFSGetCapabilities11(mapObj *map, wfsParamsObj *params,
                             psNsOws, psNsXLink, map, "FO"));
 
   /*operation metadata */
-  if ((script_url=msOWSGetOnlineResource(map, "FO", "onlineresource", req)) == NULL
-      || (script_url_encoded = msEncodeHTMLEntities(script_url)) == NULL) {
+  if ((script_url=msOWSGetOnlineResource(map, "FO", "onlineresource", req)) == NULL) {
     msSetError(MS_WFSERR, "Server URL not found", "msWFSGetCapabilities11()");
     return msWFSException11(map, "mapserv", "NoApplicableCode", params->pszVersion);
   }
@@ -382,7 +380,7 @@ int msWFSGetCapabilities11(mapObj *map, wfsParamsObj *params,
   /* -------------------------------------------------------------------- */
   psNode = xmlAddChild(psMainNode,
                        msOWSCommonOperationsMetadataOperation(psNsOws,psNsXLink,"GetCapabilities",
-                           OWS_METHOD_GETPOST, script_url_encoded));
+                           OWS_METHOD_GETPOST, script_url));
 
   xmlAddChild(psMainNode, psNode);
   xmlAddChild(psNode, msOWSCommonOperationsMetadataDomainType(
@@ -403,7 +401,7 @@ int msWFSGetCapabilities11(mapObj *map, wfsParamsObj *params,
   if (msOWSRequestIsEnabled(map, NULL, "F", "DescribeFeatureType", MS_TRUE)) {
     psNode = xmlAddChild(psMainNode,
                          msOWSCommonOperationsMetadataOperation(psNsOws,psNsXLink,"DescribeFeatureType",
-                             OWS_METHOD_GETPOST, script_url_encoded));
+                             OWS_METHOD_GETPOST, script_url));
     xmlAddChild(psMainNode, psNode);
 
     /*output format*/
@@ -419,7 +417,7 @@ int msWFSGetCapabilities11(mapObj *map, wfsParamsObj *params,
 
     psNode = xmlAddChild(psMainNode,
                          msOWSCommonOperationsMetadataOperation(psNsOws,psNsXLink,"GetFeature",
-                             OWS_METHOD_GETPOST, script_url_encoded));
+                             OWS_METHOD_GETPOST, script_url));
     xmlAddChild(psMainNode, psNode);
 
     xmlAddChild(psNode, msOWSCommonOperationsMetadataDomainType(ows_version, psNsOws,
@@ -497,7 +495,6 @@ int msWFSGetCapabilities11(mapObj *map, wfsParamsObj *params,
   xmlFreeNs(psNsOgc);
 
   free(script_url);
-  free(script_url_encoded);
   free(xsi_schemaLocation);
   free(schemalocation);
 

@@ -52,7 +52,13 @@
     
   int updateFromString(char *snippet)
   {
-    return msUpdateLabelFromString(self, snippet);
+    return msUpdateLabelFromString(self, snippet,MS_FALSE);
+  }
+  
+  %newobject convertToString;
+  char* convertToString()
+  {
+    return msWriteLabelToString(self);
   }
 
   int removeBinding(int binding) 

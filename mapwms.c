@@ -766,7 +766,7 @@ int msWMSApplyDimension(layerObj *lp, int version, char *dimensionname, char *va
       }
     } else
       msSetError(MS_WMSERR, "Dimension %s : invalid settings. Make sure that item, units and extent are set.", "msWMSApplyDimension",
-                 dimension, currentvalue);
+                 dimension);
 
     msFree(dimensionitemname);
     msFree(dimensionextentname);
@@ -789,6 +789,7 @@ int msWMSLoadGetMapParams(mapObj *map, int nVersion,
   int iUnits = -1;
   int nLayerOrder = 0;
   int transparent = MS_NOOVERRIDE;
+  int bbox_pixel_is_point = MS_FALSE;
   outputFormatObj *format = NULL;
   int validlayers = 0;
   char *styles = NULL;
@@ -1124,6 +1125,10 @@ int msWMSLoadGetMapParams(mapObj *map, int nVersion,
      */
     else if (strcasecmp(names[i], "ANGLE") == 0) {
       msMapSetRotation(map, atof(values[i]));
+    }
+    /* Vendor-specific bbox_pixel_is_point, added in ticket #4652 */
+    else if (strcasecmp(names[i], "BBOX_PIXEL_IS_POINT") == 0) {
+      bbox_pixel_is_point = (strcasecmp(values[i], "TRUE") == 0);
     }
   }
 
@@ -1681,7 +1686,7 @@ this request. Check wms/ows_enable_request settings.",
   ** in by half a pixel.  We wait till here because we want to ensure we
   ** are doing this in terms of the correct WIDTH and HEIGHT.
   */
-  if( adjust_extent ) {
+  if( adjust_extent && map->width>1 && map->height>1 && !bbox_pixel_is_point) {
     double  dx, dy;
 
     dx = (map->extent.maxx - map->extent.minx) / map->width;
@@ -2462,7 +2467,7 @@ int msDumpLayer(mapObj *map, layerObj *lp, int nVersion, const char *script_url_
                           break;
                         }
                       }
-                      if (l < lp2->numclasses)
+                      if (lp2 && l < lp2->numclasses)
                         break;
                     }
                     if (j < numNestedGroups[lp->index])
@@ -2845,8 +2850,8 @@ int msWMSGetCapabilities(mapObj *map, int nVersion, cgiRequestObj *req, owsReque
     }
 
     msIO_printf("   xsi:schemaLocation=\"http://www.opengis.net/wms %s/wms/%s/capabilities_1_3_0.xsd "
-                " http://www.opengis.net/sld http://schemas.opengis.net/sld/1.1.0/sld_capabilities.xsd ",
-                msOWSGetSchemasLocation(map), msOWSGetVersionString(nVersion, szVersionBuf));
+                " http://www.opengis.net/sld %s/sld/1.1.0/sld_capabilities.xsd ",
+                msOWSGetSchemasLocation(map), msOWSGetVersionString(nVersion, szVersionBuf), msOWSGetSchemasLocation(map));
 
     if ( msOWSLookupMetadata(&(map->web.metadata), "MO", "inspire_capabilities") ) {
       msIO_printf(" http://inspire.ec.europa.eu/schemas/inspire_vs/1.0 "
@@ -3721,7 +3726,7 @@ int msWMSGetMap(mapObj *map, int nVersion, char **names, char **values, int nume
   }
 
   if (strcasecmp(map->imagetype, "application/openlayers")!=0) {
-    msIO_setHeader("Content-Type",MS_IMAGE_MIME_TYPE(map->outputformat));
+    msIO_setHeader("Content-Type", "%s", MS_IMAGE_MIME_TYPE(map->outputformat));
     msIO_sendHeaders();
     if (msSaveImage(map, img, NULL) != MS_SUCCESS) {
       msFreeImage(img);
@@ -3745,6 +3750,10 @@ int msDumpResult(mapObj *map, int bFormatHtml, int nVersion, char *wms_exception
     char **excitems=NULL;
     int numexcitems=0;
     const char *value;
+    size_t bufferSize=0;
+    size_t reqBuffSize;
+    char *tag=NULL;
+    const char *lineTemplate="    %s = '%s'\n";
 
     layerObj *lp;
     lp = (GET_LAYER(map, i));
@@ -3802,6 +3811,7 @@ int msDumpResult(mapObj *map, int bFormatHtml, int nVersion, char *wms_exception
 
       msInitShape(&shape);
       if (msLayerGetShape(lp, &shape, &(lp->resultcache->results[j])) != MS_SUCCESS) {
+        if (tag != NULL) msFree(tag);
         msFree(itemvisible);
         return msWMSException(map, nVersion, NULL, wms_exception_format);
       }
@@ -3809,14 +3819,30 @@ int msDumpResult(mapObj *map, int bFormatHtml, int nVersion, char *wms_exception
       msIO_printf("  Feature %ld: \n", lp->resultcache->results[j].shapeindex);
 
       for(k=0; k<lp->numitems; k++) {
-        if (itemvisible[k])
-          msIO_printf("    %s = '%s'\n", lp->items[k], shape.values[k]);
-      }
+        if (itemvisible[k]) {
+          reqBuffSize = strlen(lp->items[k]) + 7;
+          if (reqBuffSize > bufferSize) {
+            if (tag != NULL) msFree(tag);
+            /* allocate more buffer than we need to try and avoid need for
+               repeated reallocation */
+            bufferSize = reqBuffSize * 2;
+            tag = (char*)msSmallMalloc(bufferSize);
+          }
+          snprintf(tag, reqBuffSize, "%s_alias", lp->items[k]);
 
+          if((value = msOWSLookupMetadata(&(lp->metadata), "MO", tag)) != NULL)
+            msIO_printf(lineTemplate, value, shape.values[k]);
+          else
+            msIO_printf(lineTemplate, lp->items[k], shape.values[k]);
+
+        }
+      }
+ 
       msFreeShape(&shape);
       numresults++;
     }
 
+    if (tag != NULL) msFree(tag);
     msFree(itemvisible);
 
     /* msLayerClose(lp); */
@@ -4595,9 +4621,19 @@ this request. Check wms/ows_enable_request settings.",
           nHeight = 20;
       }
 
-      img = msCreateLegendIcon(map, GET_LAYER(map, iLayerIndex),
-                               GET_LAYER(map, iLayerIndex)->class[i],
-                               nWidth, nHeight);
+      if ( psScale != NULL ) {
+        /* Scale-dependent legend. calculate map->scaledenom */
+        map->cellsize = msAdjustExtent(&(map->extent), map->width, map->height);
+        msCalculateScale(map->extent, map->units, map->width, map->height, map->resolution, &map->scaledenom);
+        img = msCreateLegendIcon(map, GET_LAYER(map, iLayerIndex),
+                                 GET_LAYER(map, iLayerIndex)->class[i],
+                                 nWidth, nHeight, MS_FALSE);
+      } else {
+        /* Scale-independent legend */
+        img = msCreateLegendIcon(map, GET_LAYER(map, iLayerIndex),
+                                 GET_LAYER(map, iLayerIndex)->class[i],
+                                 nWidth, nHeight, MS_TRUE);
+      }
     }
     if (img == NULL) {
       msSetError(MS_IMGERR,
@@ -4611,7 +4647,7 @@ this request. Check wms/ows_enable_request settings.",
   if (img == NULL)
     return msWMSException(map, nVersion, NULL, wms_exception_format);
 
-  msIO_setHeader("Content-Type",MS_IMAGE_MIME_TYPE(map->outputformat));
+  msIO_setHeader("Content-Type", "%s", MS_IMAGE_MIME_TYPE(map->outputformat));
   msIO_sendHeaders();
   if (msSaveImage(map, img, NULL) != MS_SUCCESS)
     return msWMSException(map, nVersion, NULL, wms_exception_format);

@@ -29,6 +29,7 @@
  * DEALINGS IN THE SOFTWARE.
  ****************************************************************************/
 
+#include "mapserver-config.h"
 #if defined(USE_WCS_SVR)
 
 #include <assert.h>
@@ -140,7 +141,7 @@ static int msWCSParseTimeOrScalar20(timeScalarUnion *u, const char *string)
   else {
     msSetError(MS_WCSERR,
                "String %s could not be parsed to a time or scalar value",
-               "msWCSParseTimeOrScalar20()");
+               "msWCSParseTimeOrScalar20()",string);
     return MS_WCS20_ERROR_VALUE;
   }
 }
@@ -545,7 +546,7 @@ static int msWCSParseResolutionString20(char *string,
   number = strchr(string, '(');
 
   if(NULL == number) {
-    msSetError(MS_WCSERR, "Invalid resolution parameter value.",
+    msSetError(MS_WCSERR, "Invalid resolution parameter value : %s.",
                "msWCSParseSize20()", string);
     return MS_FAILURE;
   }
@@ -566,8 +567,8 @@ static int msWCSParseResolutionString20(char *string,
 
   if(msStringParseDouble(number, outResolution) != MS_SUCCESS) {
     *outResolution = MS_WCS20_UNBOUNDED;
-    msSetError(MS_WCSERR, "Invalid resolution parameter value.",
-               "msWCSParseSize20()", string);
+    msSetError(MS_WCSERR, "Invalid resolution parameter value : %s.",
+               "msWCSParseSize20()", number);
     return MS_FAILURE;
   }
 
@@ -806,7 +807,7 @@ static int msWCSParseRequest20_XMLGetCoverage(
       if(NULL == (axisName = (char *) xmlGetProp(child, BAD_CAST "dimension"))) {
         msSetError(MS_WCSERR, "Attribute 'dimension' is missing "
                    "in element 'Resolution'.",
-                   "msWCSParseRequest20_XMLGetCoverage()", (char *)child->name);
+                   "msWCSParseRequest20_XMLGetCoverage()");
         return MS_FAILURE;
       }
 
@@ -844,6 +845,8 @@ static int msWCSParseRequest20_XMLGetCoverage(
           CSLAddString(params->range_subset, content);
         xmlFree(content);
       }
+    } else if (EQUAL((char *)child->name, "Extension")) {
+      continue;
     } else {
       XML_UNKNOWN_NODE_ERROR(child);
     }
@@ -1690,7 +1693,7 @@ static int msWCSWriteFile20(mapObj* map, imageObj* image, wcs20ParamsObjPtr para
                       "Content-Disposition: INLINE\r\n\r\n",
                       MS_IMAGE_EXTENSION(map->outputformat));
     } else {
-      msIO_setHeader("Content-Type",MS_IMAGE_MIME_TYPE(map->outputformat));
+      msIO_setHeader("Content-Type","%s",MS_IMAGE_MIME_TYPE(map->outputformat));
       msIO_setHeader("Content-Description","coverage data");
       msIO_setHeader("Content-Transfer-Encoding","binary");
 
@@ -1780,7 +1783,7 @@ static int msWCSWriteFile20(mapObj* map, imageObj* image, wcs20ParamsObjPtr para
           all_files[i],
           all_files[i]);
       } else {
-        msIO_setHeader("Content-Type",mimetype);
+        msIO_setHeader("Content-Type","%s",mimetype);
         msIO_setHeader("Content-Description","coverage data");
         msIO_setHeader("Content-Transfer-Encoding","binary");
         msIO_setHeader("Content-ID","coverage/%s",all_files[i]);
@@ -2080,7 +2083,7 @@ static int msWCSGetCoverageMetadata20(layerObj *layer, wcs20coverageMetadataObj 
         msSetError( MS_WCSERR,
                     "Wrong number of band names given in layer '%s'. "
                     "Expected %d, got %d.", "msWCSGetCoverageMetadata20()",
-                    layer->name, cm->numbands, num_band_names );
+                    layer->name, (int)cm->numbands, num_band_names );
         return MS_FAILURE;
       }
 

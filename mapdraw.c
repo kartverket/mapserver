@@ -34,7 +34,6 @@
 #include "mapcopy.h"
 
 
-
 #ifdef USE_GD
 /*
  * Functions to reset any pen (color index) values previously set. Used primarily to reset things when
@@ -986,7 +985,7 @@ int msDrawVectorLayer(mapObj *map, layerObj *layer, imageObj *image)
     /* Check if the shape size is ok to be drawn */
     if((shape.type == MS_SHAPE_LINE || shape.type == MS_SHAPE_POLYGON) && (minfeaturesize > 0) && (msShapeCheckSize(&shape, minfeaturesize) == MS_FALSE)) {
       if(layer->debug >= MS_DEBUGLEVEL_V)
-        msDebug("msDrawVectorLayer(): Skipping shape (%d) because LAYER::MINFEATURESIZE is bigger than shape size\n", shape.index);
+        msDebug("msDrawVectorLayer(): Skipping shape (%ld) because LAYER::MINFEATURESIZE is bigger than shape size\n", shape.index);
       msFreeShape(&shape);
       continue;
     }
@@ -1046,7 +1045,7 @@ int msDrawVectorLayer(mapObj *map, layerObj *layer, imageObj *image)
     if (layer->type == MS_LAYER_LINE && msLayerGetProcessingKey(layer, "POLYLINE_NO_CLIP")) {
       drawmode |= MS_DRAWMODE_UNCLIPPEDLINES;
     }
-  
+
     if (cache) {
       styleObj *pStyle = layer->class[shape.classindex]->styles[0];
       colorObj tmp;
@@ -1099,7 +1098,7 @@ int msDrawVectorLayer(mapObj *map, layerObj *layer, imageObj *image)
       retcode = MS_FAILURE;
       break;
     }
-
+    
     if(shape.numlines == 0) { /* once clipped the shape didn't need to be drawn */
       msFreeShape(&shape);
       continue;
@@ -1113,6 +1112,7 @@ int msDrawVectorLayer(mapObj *map, layerObj *layer, imageObj *image)
     }
 
     maxnumstyles = MS_MAX(maxnumstyles, layer->class[shape.classindex]->numstyles);
+
     msFreeShape(&shape);
   }
 
@@ -1983,14 +1983,6 @@ int msDrawShape(mapObj *map, layerObj *layer, shapeObj *shape, imageObj *image, 
   msDrawStartShape(map, layer, image, shape);
   c = shape->classindex;
 
-  /* When creating a shape in mapscript and setting the shape.text directly, the
-     text rendering fails without this #4577. If annotext of the first label is
-     not null, msShapeGetAnnotation has already been called: do nothing */
-  if(layer->class[c]->numlabels > 0 && shape->text &&
-     (layer->class[c]->labels[0] && layer->class[c]->labels[0]->annotext==NULL)) {
-    msShapeGetAnnotation(layer, shape);
-  }
-    
   /* Before we do anything else, we will check for a rangeitem.
      If its there, we need to change the style's color to map
      the range to the shape */
@@ -2265,7 +2257,7 @@ int msDrawPoint(mapObj *map, layerObj *layer, pointObj *point, imageObj *image, 
         if(msScaleInBounds(map->scaledenom, theclass->styles[s]->minscaledenom, theclass->styles[s]->maxscaledenom))
           msDrawMarkerSymbol(&map->symbolset, image, point, theclass->styles[s], layer->scalefactor);
       }
-      if(labeltext && (strlen(labeltext)>0)) {
+      if(labeltext) {
         if(layer->labelcache) {
           if(msAddLabel(map, label, layer->index, classindex, NULL, point, NULL, -1) != MS_SUCCESS) return(MS_FAILURE);
         } else

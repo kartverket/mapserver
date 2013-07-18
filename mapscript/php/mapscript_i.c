@@ -459,6 +459,11 @@ int mapObj_scaleExtent(mapObj *self, double zoomfactor, double minscaledenom,
   return msMapScaleExtent(self, zoomfactor, minscaledenom, maxscaledenom);
 }
 
+char *mapObj_convertToString(mapObj *self)
+{
+  return msWriteMapToString(self);
+}
+
 /**********************************************************************
  * class extensions for layerObj, always within the context of a map
  **********************************************************************/
@@ -506,6 +511,11 @@ layerObj *layerObj_clone(layerObj *layer)
 int layerObj_updateFromString(layerObj *self, char *snippet)
 {
   return msUpdateLayerFromString(self, snippet, MS_FALSE);
+}
+
+char *layerObj_convertToString(layerObj *self)
+{
+  return msWriteLayerToString(self);
 }
 
 int layerObj_open(layerObj *self)
@@ -891,7 +901,12 @@ labelObj *labelObj_clone(labelObj *label)
 
 int labelObj_updateFromString(labelObj *self, char *snippet)
 {
-  return msUpdateLabelFromString(self, snippet);
+  return msUpdateLabelFromString(self, snippet, MS_FALSE);
+}
+
+char *labelObj_convertToString(labelObj *self)
+{
+  return msWriteLabelToString(self);
 }
 
 int labelObj_moveStyleUp(labelObj *self, int index)
@@ -909,6 +924,33 @@ int labelObj_deleteStyle(labelObj *self, int index)
   return msDeleteLabelStyle(self, index);
 }
 
+int labelObj_setExpression(labelObj *self, char *string)
+{
+  if (!string || strlen(string) == 0) {
+    freeExpression(&self->expression);
+    return MS_SUCCESS;
+  } else return msLoadExpressionString(&self->expression, string);
+}
+
+char *labelObj_getExpressionString(labelObj *self)
+{
+  return msGetExpressionString(&(self->expression));
+}
+
+int labelObj_setText(labelObj *self, layerObj *layer, char *string)
+{
+  if (!string || strlen(string) == 0) {
+    freeExpression(&self->text);
+    return MS_SUCCESS;
+  }
+  return msLoadExpressionString(&self->text, string);
+}
+
+char *labelObj_getTextString(labelObj *self)
+{
+  return msGetExpressionString(&(self->text));
+}
+
 /**********************************************************************
  * class extensions for legendObj
  **********************************************************************/
@@ -917,12 +959,22 @@ int legendObj_updateFromString(legendObj *self, char *snippet)
   return msUpdateLegendFromString(self, snippet, MS_FALSE);
 }
 
+char *legendObj_convertToString(legendObj *self)
+{
+  return msWriteLegendToString(self);
+}
+
 /**********************************************************************
  * class extensions for queryMapObj
  **********************************************************************/
 int queryMapObj_updateFromString(queryMapObj *self, char *snippet)
 {
   return msUpdateQueryMapFromString(self, snippet, MS_FALSE);
+}
+
+char *queryMapObj_convertToString(queryMapObj *self)
+{
+  return msWriteQueryMapToString(self);
 }
 
 /**********************************************************************
@@ -934,6 +986,11 @@ int referenceMapObj_updateFromString(referenceMapObj *self, char *snippet)
   return msUpdateReferenceMapFromString(self, snippet, MS_FALSE);
 }
 
+char *referenceMapObj_convertToString(referenceMapObj *self)
+{
+  return msWriteReferenceMapToString(self);
+}
+
 /**********************************************************************
  * class extensions for scaleBarObj
  **********************************************************************/
@@ -943,6 +1000,11 @@ int scalebarObj_updateFromString(scalebarObj *self, char *snippet)
   return msUpdateScalebarFromString(self, snippet, MS_FALSE);
 }
 
+char *scalebarObj_convertToString(scalebarObj *self)
+{
+  return msWriteScalebarToString(self);
+}
+
 /**********************************************************************
  * class extensions for webObj
  **********************************************************************/
@@ -950,6 +1012,11 @@ int scalebarObj_updateFromString(scalebarObj *self, char *snippet)
 int webObj_updateFromString(webObj *self, char *snippet)
 {
   return msUpdateWebFromString(self, snippet, MS_FALSE);
+}
+
+char *webObj_convertToString(webObj *self)
+{
+  return msWriteWebToString(self);
 }
 
 /**********************************************************************
@@ -999,6 +1066,11 @@ int classObj_updateFromString(classObj *self, char *snippet)
   return msUpdateClassFromString(self, snippet, MS_FALSE);
 }
 
+char *classObj_convertToString(classObj *self)
+{
+  return msWriteClassToString(self);
+}
+
 void  classObj_destroy(classObj *self)
 {
   return; /* do nothing, map deconstrutor takes care of it all */
@@ -1033,13 +1105,15 @@ char *classObj_getTextString(classObj *self)
 
 int classObj_drawLegendIcon(classObj *self, mapObj *map, layerObj *layer, int width, int height, imageObj *dstImg, int dstX, int dstY)
 {
+#ifdef USE_GD
   msClearLayerPenValues(layer); // just in case the mapfile has already been processed
-  return msDrawLegendIcon(map, layer, self, width, height, dstImg, dstX, dstY);
+#endif
+  return msDrawLegendIcon(map, layer, self, width, height, dstImg, dstX, dstY, MS_TRUE);
 }
 
 imageObj *classObj_createLegendIcon(classObj *self, mapObj *map, layerObj *layer, int width, int height)
 {
-  return msCreateLegendIcon(map, layer, self, width, height);
+  return msCreateLegendIcon(map, layer, self, width, height, MS_TRUE);
 }
 
 
@@ -1478,8 +1552,10 @@ int rectObj_draw(rectObj *self, mapObj *map, layerObj *layer,
   msRectToPolygon(*self, &shape);
   shape.classindex = classindex;
 
-  if (text)
+  if(text && layer->class[classindex]->numlabels > 0) {
     shape.text = strdup(text);
+    msShapeGetAnnotation(layer,&shape);
+  }
   
   msDrawShape(map, layer, &shape, img, -1, MS_DRAWMODE_FEATURES|MS_DRAWMODE_LABELS);
 
@@ -1698,6 +1774,11 @@ int styleObj_updateFromString(styleObj *self, char *snippet)
   return msUpdateStyleFromString(self, snippet, MS_FALSE);
 }
 
+char *styleObj_convertToString(styleObj *self)
+{
+  return msWriteStyleToString(self);
+}
+
 int styleObj_setSymbolByName(styleObj *self, mapObj *map, char* pszSymbolName)
 {
   self->symbol = msGetSymbolIndex(&map->symbolset, pszSymbolName, MS_TRUE);
@@ -1872,6 +1953,11 @@ resultObj *resultObj_new()
 int clusterObj_updateFromString(clusterObj *self, char *snippet)
 {
   return msUpdateClusterFromString(self, snippet);
+}
+
+char *clusterObj_convertToString(clusterObj *self)
+{
+  return msWriteClusterToString(self);
 }
 
 int clusterObj_setGroup(clusterObj *self, char *string)

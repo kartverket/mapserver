@@ -466,6 +466,25 @@ int msEvalExpression(layerObj *layer, shapeObj *shape, expressionObj *expression
         if(strcmp(expression->string, shape->values[itemindex]) == 0) return MS_TRUE; /* got a match */
       }
       break;
+    case(MS_LIST):
+      if(itemindex == -1) {
+        msSetError(MS_MISCERR, "Cannot evaluate expression, no item index defined.", "msEvalExpression()");
+        return MS_FALSE;
+      }
+      if(itemindex >= layer->numitems || itemindex >= shape->numvalues) {
+        msSetError(MS_MISCERR, "Invalid item index.", "msEvalExpression()");
+        return MS_FALSE;
+      }
+      {
+        char *start,*end;
+        start = expression->string;
+        while((end = strchr(start,',')) != NULL) {
+          if(!strncmp(start,shape->values[itemindex],end-start)) return MS_TRUE;
+          start = end+1;
+        }
+        if(!strcmp(start,shape->values[itemindex])) return MS_TRUE;
+      }
+      break;
     case(MS_EXPRESSION): {
       int status;
       parseObj p;
@@ -739,6 +758,9 @@ int msAdjustImage(rectObj rect, int *width, int *height)
 double msAdjustExtent(rectObj *rect, int width, int height)
 {
   double cellsize, ox, oy;
+
+  if(width == 1 || height == 1)
+    return 0;
 
   cellsize = MS_MAX(MS_CELLSIZE(rect->minx, rect->maxx, width), MS_CELLSIZE(rect->miny, rect->maxy, height));
 
@@ -1607,13 +1629,20 @@ imageObj *msImageCreate(int width, int height, outputFormatObj *format,
 void  msTransformPoint(pointObj *point, rectObj *extent, double cellsize,
                        imageObj *image)
 {
+  double invcellsize;
   /*We should probabaly have a function defined at all the renders*/
-  if (image != NULL && MS_RENDERER_PLUGIN(image->format) &&
-      image->format->renderer == MS_RENDER_WITH_KML)
-    return;
-
-  point->x = MS_MAP2IMAGE_X(point->x, extent->minx, cellsize);
-  point->y = MS_MAP2IMAGE_Y(point->y, extent->maxy, cellsize);
+  if (image != NULL && MS_RENDERER_PLUGIN(image->format)) {
+    if(image->format->renderer == MS_RENDER_WITH_KML) {
+      return;
+    } else if(image->format->renderer == MS_RENDER_WITH_GD) {
+      point->x = MS_MAP2IMAGE_X(point->x, extent->minx, cellsize);
+      point->y = MS_MAP2IMAGE_Y(point->y, extent->maxy, cellsize);
+      return;
+    }
+  }
+  invcellsize = 1.0/cellsize;
+  point->x = MS_MAP2IMAGE_X_IC_DBL(point->x, extent->minx, invcellsize);
+  point->y = MS_MAP2IMAGE_Y_IC_DBL(point->y, extent->maxy, invcellsize);
 }
 
 
@@ -1716,7 +1745,7 @@ shapeObj *msOffsetCurve(shapeObj *p, double offset)
 {
   shapeObj *ret;
   int i, j, first,idx,ok=0;
-#if defined HAVE_GEOS_OFFSET_CURVE
+#if defined USE_GEOS && (GEOS_VERSION_MAJOR > 3 || (GEOS_VERSION_MAJOR == 3 && GEOS_VERSION_MINOR >= 3))
   ret = msGEOSOffsetCurve(p,offset);
   /* GEOS curve offsetting can fail sometimes, we continue with our own implementation
    if that is the case.*/
@@ -1866,6 +1895,11 @@ int msSetup()
 
 /* This is intended to be a function to cleanup anything that "hangs around"
    when all maps are destroyed, like Registered GDAL drivers, and so forth. */
+#ifndef NDEBUG
+#if defined(USE_LIBXML2)
+#include "maplibxml2.h"
+#endif
+#endif
 void msCleanup(int signal)
 {
   msForceTmpFileBase( NULL );
@@ -2074,7 +2108,7 @@ int msCheckParentPointer(void* p, char *objname)
     } else {
       msg="A required parent object is null";
     }
-    msSetError(MS_NULLPARENTERR, msg, "");
+    msSetError(MS_NULLPARENTERR, "%s", "", msg);
     return MS_FAILURE;
   }
   return MS_SUCCESS;
