@@ -3,7 +3,7 @@
  *
  * Project:  MapServer
  * Purpose:  OGC OWS Common Implementation include file
- * Author:   Tom Kralidis (tomkralidis@hotmail.com)
+ * Author:   Tom Kralidis (tomkralidis@gmail.com)
  *
  ******************************************************************************
  * Copyright (c) 2006, Tom Kralidis
@@ -115,9 +115,6 @@ xmlNodePtr msOWSCommonBoundingBox(xmlNsPtr psNsOws, const char *crs, int dimensi
 xmlNodePtr msOWSCommonWGS84BoundingBox(xmlNsPtr psNsOws, int dimensions, double minx, double miny, double maxx, double maxy);
 
 int _validateNamespace(xmlNsPtr psNsOws);
-
-xmlNodePtr msOWSCommonxmlNewChildEncoded( xmlNodePtr psParent, xmlNsPtr psNs, const char* name,
-    const char *content, const char *encoding);
 
 int msOWSSchemaValidation(const char* xml_schema, const char* xml);
 

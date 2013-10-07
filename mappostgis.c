@@ -587,7 +587,7 @@ wkbConvCollectionToShape(wkbObj *w, shapeObj *shape)
       failures++;
     }
   }
-  if ( failures == ncomponents )
+  if ( failures == ncomponents || ncomponents == 0)
     return MS_FAILURE;
   else
     return MS_SUCCESS;
@@ -2126,7 +2126,6 @@ int msPostGISReadShape(layerObj *layer, shapeObj *shape)
       result = wkbConvGeometryToShape(&w, shape);
       break;
 
-    case MS_LAYER_ANNOTATION:
     case MS_LAYER_QUERY:
     case MS_LAYER_CHART:
       result = msPostGISFindBestType(&w, shape);
@@ -2196,6 +2195,8 @@ int msPostGISReadShape(layerObj *layer, shapeObj *shape)
     shape->numvalues = layer->numitems;
 
     msComputeBounds(shape);
+  } else {
+     shape->type = MS_SHAPE_NULL;
   }
 
   if( layer->debug > 2 ) {

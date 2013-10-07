@@ -930,10 +930,6 @@ static int processFeatureTag(mapservObj *mapserv, char **line, layerObj *layer)
 
     mapserv->resultshape.classindex = msShapeGetClass(layer, layer->map, &mapserv->resultshape,  NULL, -1);
 
-    if(mapserv->resultshape.classindex >=0 && layer->class[mapserv->resultshape.classindex]->numlabels > 0)
-      msShapeGetAnnotation(layer, &mapserv->resultshape); // RFC 77 TODO: check return value
-
-
     /* prepare any necessary JOINs here (one-to-one only) */
     if(layer->numjoins > 0) {
       for(j=0; j<layer->numjoins; j++) {
@@ -1533,7 +1529,7 @@ static int processShplabelTag(layerObj *layer, char **line, shapeObj *origshape)
   double cellsize=0;
   int labelposvalid = MS_FALSE;
   pointObj labelPos;
-  int i,status;
+  int status;
   char number[64]; /* holds a single number in the extent */
   char numberFormat[16];
   shapeObj *shape = NULL;
@@ -1618,10 +1614,6 @@ static int processShplabelTag(layerObj *layer, char **line, shapeObj *origshape)
         }
       }
     } else if(shape->type == MS_SHAPE_LINE) {
-      pointObj **annopoints = NULL;
-      double **angles = NULL, **lengths = NULL;
-      int numpoints = 1;
-
       labelposvalid = MS_FALSE;
       if(layer->transform == MS_TRUE) {
         if(layer->project && msProjectionsDiffer(&(layer->projection), &(layer->map->projection)))
@@ -1634,22 +1626,21 @@ static int processShplabelTag(layerObj *layer, char **line, shapeObj *origshape)
         msOffsetShapeRelativeTo(shape, layer);
 
       if(shape->numlines > 0) {
-        annopoints = msPolylineLabelPoint(shape, -1, 0, &angles, &lengths, &numpoints, MS_FALSE);
-        if(numpoints > 0) {
-          /* convert to geo */
-          labelPos.x = annopoints[0]->x;
-          labelPos.y = annopoints[0]->y;
-
-          labelposvalid = MS_TRUE;
-          for(i=0; i<numpoints; i++) {
-            if(annopoints[i]) msFree(annopoints[i]);
-            if(angles[i]) msFree(angles[i]);
-            if(lengths[i]) msFree(lengths[i]);
-          }
-          msFree(angles);
-          msFree(annopoints);
-          msFree(lengths);
+        struct label_auto_result lar;
+        memset(&lar,0,sizeof(struct label_auto_result));
+        if(UNLIKELY(MS_FAILURE == msPolylineLabelPoint(layer->map, shape, NULL, NULL, &lar, 0))) {
+          free(lar.angles);
+          free(lar.label_points);
+          return MS_FAILURE;
         }
+        if(lar.num_label_points > 0) {
+          /* convert to geo */
+          labelPos.x = lar.label_points[0].x;
+          labelPos.y = lar.label_points[0].y;
+          labelposvalid = MS_TRUE;
+        }
+        free(lar.angles);
+        free(lar.label_points);
       }
     } else if (shape->type == MS_SHAPE_POLYGON) {
       labelposvalid = MS_FALSE;
@@ -1679,11 +1670,11 @@ static int processShplabelTag(layerObj *layer, char **line, shapeObj *origshape)
       pointObj p2;
       int label_offset_x, label_offset_y;
       labelObj *label=NULL;
-      rectObj r;
-      shapeObj poly;
+      label_bounds lbounds;
+      lineObj lbounds_line;
+      pointObj lbounds_point[5];
       double tmp;
 
-      msInitShape(&poly);
       p1.x =labelPos.x;
       p1.y =labelPos.y;
 
@@ -1694,18 +1685,29 @@ static int processShplabelTag(layerObj *layer, char **line, shapeObj *origshape)
         /* RFC 77: classes (and shapes) can have more than 1 piece of annotation, here we only use the first (index=0) */
         if(shape->classindex >= 0  && layer->class[shape->classindex]->numlabels > 0) {
           label = layer->class[shape->classindex]->labels[0];
-          if(msGetLabelSize(layer->map, label, label->annotext, label->size, &r, NULL) == MS_SUCCESS) {
-            label_offset_x = (int)(label->offsetx*layer->scalefactor);
-            label_offset_y = (int)(label->offsety*layer->scalefactor);
+          if(msGetLabelStatus(layer->map,layer,shape,label) == MS_ON) {
+            char *annotext = msShapeGetLabelAnnotation(layer,shape,label);
+            if(annotext) {
+              textSymbolObj ts;
+              initTextSymbol(&ts);
+              msPopulateTextSymbolForLabelAndString(&ts, label, annotext, layer->scalefactor, 1.0, 0);
 
-            p1 = get_metrics(&labelPos, label->position, r, label_offset_x, label_offset_y, label->angle, 0, &poly);
+              label_offset_x = (int)(label->offsetx*layer->scalefactor);
+              label_offset_y = (int)(label->offsety*layer->scalefactor);
+              lbounds.poly = &lbounds_line;
+              lbounds_line.numpoints = 5;
+              lbounds_line.point = lbounds_point;
 
-            /* should we use the point returned from  get_metrics?. From few test done, It seems
-               to return the UL corner of the text. For now use the bounds.minx/miny */
-            p1.x = poly.bounds.minx;
-            p1.y = poly.bounds.miny;
-            p2.x = poly.bounds.maxx;
-            p2.y = poly.bounds.maxy;
+              p1 = get_metrics(&labelPos, label->position, ts.textpath, label_offset_x, label_offset_y, label->angle* MS_DEG_TO_RAD, 0, &lbounds);
+
+              /* should we use the point returned from  get_metrics?. From few test done, It seems
+                to return the UL corner of the text. For now use the bounds.minx/miny */
+              p1.x = lbounds.bbox.minx;
+              p1.y = lbounds.bbox.miny;
+              p2.x = lbounds.bbox.maxx;
+              p2.y = lbounds.bbox.maxy;
+              freeTextSymbol(&ts);
+            }
           }
         }
       }
@@ -2417,7 +2419,7 @@ int processIcon(mapObj *map, int nIdxLayer, int nIdxClass, char** pszInstr, char
         if(myHashTable)
           msFreeHashTable(myHashTable);
 
-        msSetError(MS_GDERR, "Error while creating GD image.", "processIcon()");
+        msSetError(MS_IMGERR, "Error while creating image.", "processIcon()");
         return MS_FAILURE;
       }
 
@@ -2529,12 +2531,6 @@ int generateGroupTemplate(char* pszGroupTemplate, mapObj *map, char* pszGroupNam
       if( (nOptFlag & 4) == 0  &&
           GET_LAYER(map, map->layerorder[j])->type == MS_LAYER_QUERY )
         bShowGroup = 0;
-
-      /* dont display layer is annotation. */
-      if( (nOptFlag & 8) == 0 &&
-          GET_LAYER(map, map->layerorder[j])->type == MS_LAYER_ANNOTATION )
-        bShowGroup = 0;
-
 
       /* dont display layer if out of scale. */
       if((nOptFlag & 1) == 0) {
@@ -2683,11 +2679,6 @@ int generateLayerTemplate(char *pszLayerTemplate, mapObj *map, int nIdxLayer, ha
   if((nOptFlag & 4) == 0  && GET_LAYER(map, nIdxLayer)->type == MS_LAYER_QUERY)
     return MS_SUCCESS;
 
-  /* dont display layer is annotation. */
-  /* check this if Opt flag is not set       */
-  if((nOptFlag & 8) == 0 && GET_LAYER(map, nIdxLayer)->type == MS_LAYER_ANNOTATION)
-    return MS_SUCCESS;
-
   /* dont display layer if out of scale. */
   /* check this if Opt flag is not set             */
   if((nOptFlag & 1) == 0) {
@@ -2825,11 +2816,6 @@ int generateClassTemplate(char* pszClassTemplate, mapObj *map, int nIdxLayer, in
   /* dont display class if layer is query. */
   /* check this if Opt flag is not set       */
   if((nOptFlag & 4) == 0 && GET_LAYER(map, nIdxLayer)->type == MS_LAYER_QUERY)
-    return MS_SUCCESS;
-
-  /* dont display class if layer is annotation. */
-  /* check this if Opt flag is not set       */
-  if((nOptFlag & 8) == 0 && GET_LAYER(map, nIdxLayer)->type == MS_LAYER_ANNOTATION)
     return MS_SUCCESS;
 
   /* dont display layer if out of scale. */
@@ -3172,6 +3158,9 @@ char *generateLegendTemplate(mapservObj *mapserv)
                 continue;
             }
           }
+          if(mapserv->hittest && mapserv->hittest->layerhits[mapserv->map->layerorder[j]].status == 0) {
+            continue;
+          }
 
           if(GET_LAYER(mapserv->map, mapserv->map->layerorder[j])->group && strcmp(GET_LAYER(mapserv->map, mapserv->map->layerorder[j])->group, papszGroups[i]) == 0) {
             /* process all layer tags */
@@ -3198,6 +3187,9 @@ char *generateLegendTemplate(mapservObj *mapserv)
                 /* process all class tags */
                 if(!GET_LAYER(mapserv->map, mapserv->map->layerorder[j])->class[k]->name)
                   continue;
+                if(mapserv->hittest && mapserv->hittest->layerhits[mapserv->map->layerorder[j]].classhits[k].status == 0) {
+                  continue;
+                }
 
                 if(generateClassTemplate(legClassHtml, mapserv->map, mapserv->map->layerorder[j], k, classArgs, &legClassHtmlCopy, pszPrefix) != MS_SUCCESS) {
                   if(pszResult)
@@ -3233,6 +3225,9 @@ char *generateLegendTemplate(mapservObj *mapserv)
                 continue;
             }
           }
+          if(mapserv->hittest && mapserv->hittest->layerhits[mapserv->map->layerorder[j]].status == 0) {
+            continue;
+          }
 
           if(GET_LAYER(mapserv->map, mapserv->map->layerorder[j])->group && strcmp(GET_LAYER(mapserv->map, mapserv->map->layerorder[j])->group, papszGroups[i]) == 0) {
             /* for all classes in layer */
@@ -3241,6 +3236,9 @@ char *generateLegendTemplate(mapservObj *mapserv)
                 /* process all class tags */
                 if(!GET_LAYER(mapserv->map, mapserv->map->layerorder[j])->class[k]->name)
                   continue;
+                if(mapserv->hittest && mapserv->hittest->layerhits[mapserv->map->layerorder[j]].classhits[k].status == 0) {
+                  continue;
+                }
 
                 if(generateClassTemplate(legClassHtml, mapserv->map, mapserv->map->layerorder[j], k, classArgs, &legClassHtmlCopy, pszPrefix) != MS_SUCCESS) {
                   if(pszResult)
@@ -3281,6 +3279,9 @@ char *generateLegendTemplate(mapservObj *mapserv)
           } else
             nLegendOrder=0;
         }
+        if(mapserv->hittest && mapserv->hittest->layerhits[mapserv->map->layerorder[j]].status == 0) {
+          continue;
+        }
 
         /* process a layer tags */
         if(generateLayerTemplate(legLayerHtml, mapserv->map, mapserv->map->layerorder[j], layerArgs, &legLayerHtmlCopy, pszPrefix) != MS_SUCCESS) {
@@ -3304,6 +3305,9 @@ char *generateLegendTemplate(mapservObj *mapserv)
             /* process all class tags */
             if(!GET_LAYER(mapserv->map, mapserv->map->layerorder[j])->class[k]->name)
               continue;
+            if(mapserv->hittest && mapserv->hittest->layerhits[mapserv->map->layerorder[j]].classhits[k].status == 0) {
+              continue;
+            }
 
             if(generateClassTemplate(legClassHtml, mapserv->map, mapserv->map->layerorder[j], k, classArgs, &legClassHtmlCopy, pszPrefix) != MS_SUCCESS) {
               if(pszResult)
@@ -3339,10 +3343,16 @@ char *generateLegendTemplate(mapservObj *mapserv)
                 continue;
             }
           }
+          if(mapserv->hittest && mapserv->hittest->layerhits[mapserv->map->layerorder[j]].status == 0) {
+            continue;
+          }
 
           for (k=0; k<GET_LAYER(mapserv->map, mapserv->map->layerorder[j])->numclasses; k++) {
             if(!GET_LAYER(mapserv->map, mapserv->map->layerorder[j])->class[k]->name)
               continue;
+            if(mapserv->hittest && mapserv->hittest->layerhits[mapserv->map->layerorder[j]].classhits[k].status == 0) {
+              continue;
+            }
 
             if(generateClassTemplate(legClassHtml, mapserv->map, mapserv->map->layerorder[j], k, classArgs, &legClassHtmlCopy, pszPrefix) != MS_SUCCESS) {
               if(pszResult)
@@ -4473,6 +4483,8 @@ mapservObj *msAllocMapServObj()
   mapserv->QueryCoordSource=NONE;
   mapserv->ZoomSize=0; /* zoom absolute magnitude (i.e. > 0) */
 
+  mapserv->hittest = NULL;
+
   return mapserv;
 }
 
@@ -4482,6 +4494,10 @@ void msFreeMapServObj(mapservObj* mapserv)
 
   if(mapserv) {
     if( mapserv->map ) {
+      if(mapserv->hittest) {
+        freeMapHitTests(mapserv->map,mapserv->hittest);
+        free(mapserv->hittest);
+      }
       msFreeMap(mapserv->map);
       mapserv->map = NULL;
     }
@@ -4579,7 +4595,7 @@ int msGenerateImages(mapservObj *mapserv, int bQueryMap, int bReturnOnError)
     /* render the legend */
     if(mapserv->map->legend.status == MS_ON) {
       imageObj *image = NULL;
-      image = msDrawLegend(mapserv->map, MS_FALSE);
+      image = msDrawLegend(mapserv->map, MS_FALSE, NULL);
       if(image) {
         snprintf(buffer, sizeof(buffer), "%s%sleg%s.%s", mapserv->map->web.imagepath, mapserv->map->name, mapserv->Id, MS_IMAGE_EXTENSION(mapserv->map->outputformat));
 

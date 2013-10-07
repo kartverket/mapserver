@@ -7,7 +7,7 @@
  *           1.0.0 (OGC Document 05-008c1)
  *           1.1.0 (OGC document 06-121r3)
  *
- * Author:   Tom Kralidis (tomkralidis@hotmail.com)
+ * Author:   Tom Kralidis (tomkralidis@gmail.com)
  *
  ******************************************************************************
  * Copyright (c) 2006, Tom Kralidis
@@ -394,7 +394,7 @@ xmlNodePtr msOWSCommonOperationsMetadataOperation(xmlNsPtr psNsOws, xmlNsPtr psX
  * @param version the integerized x.y.z version of OWS Common to use
  * @param elname name of the element (Parameter | Constraint)
  * @param name name of the Parameter
- * @param values list of values (comma seperated list) or NULL if none
+ * @param values list of values (comma separated list) or NULL if none
  *
  * @return psRootNode xmlNodePtr pointer of XML construct
  *
@@ -613,21 +613,6 @@ int _validateNamespace(xmlNsPtr psNsOws)
     return MS_SUCCESS;
   else
     return MS_FAILURE;
-}
-
-xmlNodePtr msOWSCommonxmlNewChildEncoded( xmlNodePtr psParent, xmlNsPtr psNs, const char* name,
-    const char *content, const char *encoding)
-{
-  char *encoded = NULL;
-  xmlNodePtr psNode;
-
-  if (encoding && content) {
-    encoded = msGetEncodedString(content, encoding);
-    psNode =  xmlNewChild(psParent, psNs, BAD_CAST name, BAD_CAST encoded);
-    msFree(encoded);
-    return psNode;
-  } else
-    return xmlNewChild(psParent, psNs, BAD_CAST name, BAD_CAST content);
 }
 
 /*

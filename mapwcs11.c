@@ -64,7 +64,6 @@ int msWCSException11(mapObj *map, const char *locator,
   char *errorString     = NULL;
   char *errorMessage    = NULL;
   char *schemasLocation = NULL;
-  const char * encoding;
 
   xmlDocPtr  psDoc      = NULL;
   xmlNodePtr psRootNode = NULL;
@@ -73,7 +72,6 @@ int msWCSException11(mapObj *map, const char *locator,
 
   psNsOws = xmlNewNs(NULL, BAD_CAST "http://www.opengis.net/ows/1.1", BAD_CAST "ows");
 
-  encoding = msOWSLookupMetadata(&(map->web.metadata), "CO", "encoding");
   errorString = msGetErrorString("\n");
   errorMessage = msEncodeHTMLEntities(errorString);
   schemasLocation = msEncodeHTMLEntities(msOWSGetSchemasLocation(map));
@@ -86,13 +84,10 @@ int msWCSException11(mapObj *map, const char *locator,
 
   xmlNewNs(psRootNode, BAD_CAST "http://www.opengis.net/ows/1.1", BAD_CAST "ows");
 
-  if (encoding)
-    msIO_setHeader("Content-Type","text/xml; charset=%s", encoding);
-  else
-    msIO_setHeader("Content-Type","text/xml");
+  msIO_setHeader("Content-Type","text/xml; charset=UTF-8");
   msIO_sendHeaders();
 
-  xmlDocDumpFormatMemoryEnc(psDoc, &buffer, &size, (encoding ? encoding : "ISO-8859-1"), 1);
+  xmlDocDumpFormatMemoryEnc(psDoc, &buffer, &size, "UTF-8", 1);
 
   msIO_printf("%s", buffer);
 
@@ -156,9 +151,6 @@ static char *msWCSGetFormatsList11( mapObj *map, layerObj *layer )
     for( i = 0; i < map->numoutputformats; i++ ) {
       switch( map->outputformatlist[i]->renderer ) {
           /* seeminly normal raster format */
-#ifdef USE_GD
-        case MS_RENDER_WITH_GD:
-#endif
         case MS_RENDER_WITH_AGG:
         case MS_RENDER_WITH_RAWDATA:
           tokens[numtokens++] = msStrdup(map->outputformatlist[i]->name);
@@ -376,7 +368,6 @@ int msWCSGetCapabilities11(mapObj *map, wcsParamsObj *params,
   xmlNodePtr psRootNode, psMainNode, psNode;
   char *identifier_list = NULL, *format_list = NULL;
   const char *updatesequence=NULL;
-  const char *encoding;
   xmlNsPtr psOwsNs, psXLinkNs;
   char *schemaLocation = NULL;
   char *xsi_schemaLocation = NULL;
@@ -393,7 +384,6 @@ int msWCSGetCapabilities11(mapObj *map, wcsParamsObj *params,
   /* -------------------------------------------------------------------- */
 
   updatesequence = msOWSLookupMetadata(&(map->web.metadata), "CO", "updatesequence");
-  encoding = msOWSLookupMetadata(&(map->web.metadata), "CO", "encoding");
 
   if (params->updatesequence != NULL) {
     i = msOWSNegotiateUpdateSequence(params->updatesequence, updatesequence);
@@ -599,15 +589,12 @@ int msWCSGetCapabilities11(mapObj *map, wcsParamsObj *params,
   if( msIO_needBinaryStdout() == MS_FAILURE )
     return MS_FAILURE;
 
-  if (encoding)
-    msIO_setHeader("Content-Type","text/xml; charset=%s", encoding);
-  else
-    msIO_setHeader("Content-Type","text/xml");
+  msIO_setHeader("Content-Type","text/xml; charset=UTF-8");
   msIO_sendHeaders();
 
   context = msIO_getHandler(stdout);
 
-  xmlDocDumpFormatMemoryEnc(psDoc, &buffer, &size, (encoding ? encoding : "ISO-8859-1"), 1);
+  xmlDocDumpFormatMemoryEnc(psDoc, &buffer, &size, "UTF-8", 1);
   msIO_contextWrite(context, buffer, size);
   xmlFree(buffer);
 
@@ -898,11 +885,8 @@ int msWCSDescribeCoverage11(mapObj *map, wcsParamsObj *params, owsRequestObj *ow
   xmlNsPtr psOwsNs;
   char *schemaLocation = NULL;
   char *xsi_schemaLocation = NULL;
-  const char *encoding;
 
   int i,j;
-
-  encoding = msOWSLookupMetadata(&(map->web.metadata), "CO", "encoding");
 
   /* -------------------------------------------------------------------- */
   /*      We will actually get the coverages list as a single item in     */
@@ -998,15 +982,12 @@ int msWCSDescribeCoverage11(mapObj *map, wcsParamsObj *params, owsRequestObj *ow
     if( msIO_needBinaryStdout() == MS_FAILURE )
       return MS_FAILURE;
 
-    if (encoding)
-      msIO_setHeader("Content-Type","text/xml; charset=%s", encoding);
-    else
-      msIO_setHeader("Content-Type","text/xml");
+    msIO_setHeader("Content-Type","text/xml; charset=UTF-8");
     msIO_sendHeaders();
 
     context = msIO_getHandler(stdout);
 
-    xmlDocDumpFormatMemoryEnc(psDoc, &buffer, &size, (encoding ? encoding : "ISO-8859-1"), 1);
+    xmlDocDumpFormatMemoryEnc(psDoc, &buffer, &size, "UTF-8", 1);
     msIO_contextWrite(context, buffer, size);
     xmlFree(buffer);
   }
@@ -1160,10 +1141,7 @@ int  msWCSReturnCoverage11( wcsParamsObj *params, mapObj *map,
   int status, i;
   char *filename = NULL;
   char *base_dir = NULL;
-  const char *encoding;
   const char *fo_filename;
-
-  encoding = msOWSLookupMetadata(&(map->web.metadata), "CO", "encoding");
 
   fo_filename = msGetOutputFormatOption( image->format, "FILENAME", NULL );
 
@@ -1218,40 +1196,20 @@ int  msWCSReturnCoverage11( wcsParamsObj *params, mapObj *map,
   /* -------------------------------------------------------------------- */
   /*      Output stock header.                                            */
   /* -------------------------------------------------------------------- */
-  if (encoding) {
-    msIO_setHeader("Content-Type","multipart/mixed; boundary=wcs");
-    msIO_sendHeaders();
-    msIO_fprintf(
-      stdout,
-      "\r\n--wcs\r\n"
-      "Content-Type: text/xml; charset=%s\r\n"
-      "Content-ID: wcs.xml\r\n\r\n"
-      "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n"
-      "<Coverages\n"
-      "     xmlns=\"http://www.opengis.net/wcs/1.1\"\n"
-      "     xmlns:ows=\"http://www.opengis.net/ows/1.1\"\n"
-      "     xmlns:xlink=\"http://www.w3.org/1999/xlink\"\n"
-      "     xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\"\n"
-      "     xsi:schemaLocation=\"http://www.opengis.net/ows/1.1 ../owsCoverages.xsd\">\n"
-      "  <Coverage>\n",
-      encoding);
-  } else {
-    msIO_setHeader("Content-Type","multipart/mixed; boundary=wcs");
-    msIO_sendHeaders();
-    msIO_fprintf(
-      stdout,
-      "\r\n--wcs\r\n"
-      "Content-Type: text/xml\r\n"
-      "Content-ID: wcs.xml\r\n\r\n"
-      "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n"
-      "<Coverages\n"
-      "     xmlns=\"http://www.opengis.net/wcs/1.1\"\n"
-      "     xmlns:ows=\"http://www.opengis.net/ows/1.1\"\n"
-      "     xmlns:xlink=\"http://www.w3.org/1999/xlink\"\n"
-      "     xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\"\n"
-      "     xsi:schemaLocation=\"http://www.opengis.net/ows/1.1 ../owsCoverages.xsd\">\n"
-      "  <Coverage>\n");
-  }
+  msIO_setHeader("Content-Type","multipart/mixed; boundary=wcs");
+  msIO_sendHeaders();
+  msIO_printf(
+    "\r\n--wcs\r\n"
+    "Content-Type: text/xml; charset=UTF-8\r\n"
+    "Content-ID: wcs.xml\r\n\r\n"
+    "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n"
+    "<Coverages\n"
+    "     xmlns=\"http://www.opengis.net/wcs/1.1\"\n"
+    "     xmlns:ows=\"http://www.opengis.net/ows/1.1\"\n"
+    "     xmlns:xlink=\"http://www.w3.org/1999/xlink\"\n"
+    "     xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\"\n"
+    "     xsi:schemaLocation=\"http://www.opengis.net/ows/1.1 ../owsCoverages.xsd\">\n"
+    "  <Coverage>\n");
 
   /* -------------------------------------------------------------------- */
   /*      If we weren't able to write data under /vsimem, then we just    */
